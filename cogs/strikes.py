@@ -31,6 +31,19 @@ def get_guild_config(data, guild_id: int) -> dict:
     return data[gid]
 
 
+async def ensure_bot_role(guild: discord.Guild, bot):
+    role = discord.utils.get(guild.roles, name="Anti-Ping & Moderation")
+    if not role:
+        role = await guild.create_role(
+            name="Anti-Ping & Moderation",
+            color=discord.Color(0x3498db),
+            reason="Anti Ping bot setup"
+        )
+    me = guild.get_member(bot.user.id)
+    if me and role not in me.roles:
+        await me.add_roles(role)
+
+
 async def ensure_strike_roles(guild: discord.Guild):
     data = load_data()
     cfg = get_guild_config(data, guild.id)
@@ -109,13 +122,14 @@ class StrikesCog(commands.Cog):
         self.bot = bot
 
     @commands.Cog.listener()
-    async def on_guild_join(self, guild):
-        await ensure_strike_roles(guild)
-
-    @commands.Cog.listener()
     async def on_ready(self):
         for guild in self.bot.guilds:
             await ensure_strike_roles(guild)
+            await ensure_bot_role(guild, self.bot)
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        await ensure_bot_role(guild, self.bot)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -159,16 +173,16 @@ class StrikesCog(commands.Cog):
                 delete_after=8
             )
 
-    @commands.command(name="warn")
-    @commands.has_permissions(manage_messages=True)
-    async def warn(self, ctx, member: discord.Member):
-        strike = await apply_strike(member, ctx.guild, moderator=ctx.author)
-        await ctx.send(f"{member.mention} has been warned. They are now on **Strike {strike}**.")
+    @discord.app_commands.command(name="warn", description="Give a member a strike.")
+    @discord.app_commands.default_permissions(manage_messages=True)
+    async def warn(self, interaction: discord.Interaction, member: discord.Member):
+        strike = await apply_strike(member, interaction.guild, moderator=interaction.user)
+        await interaction.response.send_message(f"{member.mention} has been warned. They are now on **Strike {strike}**.")
 
-    @commands.command(name="strikes")
-    async def check_strikes(self, ctx, member: discord.Member):
+    @discord.app_commands.command(name="strikes", description="Check a member's current strike level.")
+    async def check_strikes(self, interaction: discord.Interaction, member: discord.Member):
         data = load_data()
-        cfg = get_guild_config(data, ctx.guild.id)
+        cfg = get_guild_config(data, interaction.guild.id)
         strike_roles = cfg["strike_roles"]
 
         current = 0
@@ -178,23 +192,25 @@ class StrikesCog(commands.Cog):
                 current = i
                 break
 
-        await ctx.send(f"{member.mention} is on **Strike {current}**." if current else f"{member.mention} has no strikes.")
+        await interaction.response.send_message(
+            f"{member.mention} is on **Strike {current}**." if current else f"{member.mention} has no strikes."
+        )
 
-    @commands.command(name="clearstrikes")
-    @commands.has_permissions(manage_roles=True)
-    async def clear_strikes(self, ctx, member: discord.Member):
+    @discord.app_commands.command(name="clearstrikes", description="Clear all strikes from a member.")
+    @discord.app_commands.default_permissions(manage_roles=True)
+    async def clear_strikes(self, interaction: discord.Interaction, member: discord.Member):
         data = load_data()
-        cfg = get_guild_config(data, ctx.guild.id)
+        cfg = get_guild_config(data, interaction.guild.id)
         strike_roles = cfg["strike_roles"]
 
         for i in range(1, 4):
             role_id = strike_roles.get(str(i))
             if role_id:
-                role = ctx.guild.get_role(role_id)
+                role = interaction.guild.get_role(role_id)
                 if role and role in member.roles:
                     await member.remove_roles(role)
 
-        await ctx.send(f"Cleared all strikes for {member.mention}.")
+        await interaction.response.send_message(f"Cleared all strikes for {member.mention}.")
 
 
 async def setup(bot):

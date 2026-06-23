@@ -25,80 +25,90 @@ def build_dashboard_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
     return embed
 
 
-class AddProtectedRoleModal(discord.ui.Modal, title="Add Protected Role"):
-    role_id = discord.ui.TextInput(label="Role ID", placeholder="Right-click role → Copy ID")
+class AddProtectedRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(placeholder="Select a role to protect...", min_values=1, max_values=1)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
-        try:
-            rid = int(self.role_id.value.strip())
-            if rid not in cfg["protected_roles"]:
-                cfg["protected_roles"].append(rid)
-                save_data(data)
-            await interaction.response.edit_message(
-                embed=build_dashboard_embed(cfg, interaction.guild),
-                view=DashboardView()
-            )
-        except ValueError:
-            await interaction.response.send_message("Invalid role ID.", ephemeral=True)
+        rid = self.values[0].id
+        if rid not in cfg["protected_roles"]:
+            cfg["protected_roles"].append(rid)
+            save_data(data)
+        await interaction.response.edit_message(
+            embed=build_dashboard_embed(cfg, interaction.guild),
+            view=DashboardView()
+        )
 
 
-class RemoveProtectedRoleModal(discord.ui.Modal, title="Remove Protected Role"):
-    role_id = discord.ui.TextInput(label="Role ID", placeholder="Right-click role → Copy ID")
+class RemoveProtectedRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(placeholder="Select a role to unprotect...", min_values=1, max_values=1)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
-        try:
-            rid = int(self.role_id.value.strip())
-            if rid in cfg["protected_roles"]:
-                cfg["protected_roles"].remove(rid)
-                save_data(data)
-            await interaction.response.edit_message(
-                embed=build_dashboard_embed(cfg, interaction.guild),
-                view=DashboardView()
-            )
-        except ValueError:
-            await interaction.response.send_message("Invalid role ID.", ephemeral=True)
+        rid = self.values[0].id
+        if rid in cfg["protected_roles"]:
+            cfg["protected_roles"].remove(rid)
+            save_data(data)
+        await interaction.response.edit_message(
+            embed=build_dashboard_embed(cfg, interaction.guild),
+            view=DashboardView()
+        )
 
 
-class AddAllowedRoleModal(discord.ui.Modal, title="Add Allowed Role"):
-    role_id = discord.ui.TextInput(label="Role ID", placeholder="Right-click role → Copy ID")
+class AddAllowedRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(placeholder="Select a role to allow pinging...", min_values=1, max_values=1)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
-        try:
-            rid = int(self.role_id.value.strip())
-            if rid not in cfg["allowed_roles"]:
-                cfg["allowed_roles"].append(rid)
-                save_data(data)
-            await interaction.response.edit_message(
-                embed=build_dashboard_embed(cfg, interaction.guild),
-                view=DashboardView()
-            )
-        except ValueError:
-            await interaction.response.send_message("Invalid role ID.", ephemeral=True)
+        rid = self.values[0].id
+        if rid not in cfg["allowed_roles"]:
+            cfg["allowed_roles"].append(rid)
+            save_data(data)
+        await interaction.response.edit_message(
+            embed=build_dashboard_embed(cfg, interaction.guild),
+            view=DashboardView()
+        )
 
 
-class RemoveAllowedRoleModal(discord.ui.Modal, title="Remove Allowed Role"):
-    role_id = discord.ui.TextInput(label="Role ID", placeholder="Right-click role → Copy ID")
+class RemoveAllowedRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(placeholder="Select a role to remove from allowed...", min_values=1, max_values=1)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
-        try:
-            rid = int(self.role_id.value.strip())
-            if rid in cfg["allowed_roles"]:
-                cfg["allowed_roles"].remove(rid)
-                save_data(data)
-            await interaction.response.edit_message(
-                embed=build_dashboard_embed(cfg, interaction.guild),
-                view=DashboardView()
-            )
-        except ValueError:
-            await interaction.response.send_message("Invalid role ID.", ephemeral=True)
+        rid = self.values[0].id
+        if rid in cfg["allowed_roles"]:
+            cfg["allowed_roles"].remove(rid)
+            save_data(data)
+        await interaction.response.edit_message(
+            embed=build_dashboard_embed(cfg, interaction.guild),
+            view=DashboardView()
+        )
+
+
+class SelectProtectedView(discord.ui.View):
+    def __init__(self, mode: str):
+        super().__init__(timeout=60)
+        if mode == "add":
+            self.add_item(AddProtectedRoleSelect())
+        else:
+            self.add_item(RemoveProtectedRoleSelect())
+
+
+class SelectAllowedView(discord.ui.View):
+    def __init__(self, mode: str):
+        super().__init__(timeout=60)
+        if mode == "add":
+            self.add_item(AddAllowedRoleSelect())
+        else:
+            self.add_item(RemoveAllowedRoleSelect())
 
 
 class SetPunishmentView(discord.ui.View):
@@ -157,19 +167,19 @@ class DashboardView(discord.ui.View):
 
     @discord.ui.button(label="🔒 Add Protected Role", style=discord.ButtonStyle.danger, row=0)
     async def add_protected(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AddProtectedRoleModal())
+        await interaction.response.edit_message(view=SelectProtectedView("add"))
 
     @discord.ui.button(label="🔓 Remove Protected Role", style=discord.ButtonStyle.secondary, row=0)
     async def remove_protected(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(RemoveProtectedRoleModal())
+        await interaction.response.edit_message(view=SelectProtectedView("remove"))
 
     @discord.ui.button(label="✅ Add Allowed Role", style=discord.ButtonStyle.success, row=1)
     async def add_allowed(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(AddAllowedRoleModal())
+        await interaction.response.edit_message(view=SelectAllowedView("add"))
 
     @discord.ui.button(label="❌ Remove Allowed Role", style=discord.ButtonStyle.secondary, row=1)
     async def remove_allowed(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(RemoveAllowedRoleModal())
+        await interaction.response.edit_message(view=SelectAllowedView("remove"))
 
     @discord.ui.button(label="⚖️ Set Punishment", style=discord.ButtonStyle.primary, row=2)
     async def set_punishment(self, interaction: discord.Interaction, button: discord.ui.Button):

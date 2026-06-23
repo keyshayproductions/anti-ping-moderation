@@ -1,1 +1,11 @@
-{}
+{
+  "1517544765917499482": {
+    "protected_roles": [
+      1517685519876751521
+    ],
+    "allowed_roles": [],
+    "punishment": "timeout",
+    "timeout_minutes": 25,
+    "strike_roles": {}
+  }
+}
