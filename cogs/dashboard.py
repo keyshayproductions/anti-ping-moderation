@@ -4,11 +4,8 @@ from cogs.strikes import load_data, save_data, get_guild_config
 
 
 def build_dashboard_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
-    allowed_roles = cfg.get("allowed_admin_roles", [])
     punishment = cfg.get("punishment", "timeout")
     timeout_mins = cfg.get("timeout_minutes", 60)
-
-    allowed_str = " ".join(f"<@&{r}>" for r in allowed_roles) if allowed_roles else "_Anyone (with Manage Messages)_"
 
     if punishment == "timeout":
         punishment_str = f"Timeout ({timeout_mins} min)"
@@ -24,53 +21,10 @@ def build_dashboard_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
         inline=False
     )
     embed.add_field(name="━━━━━━━━━━━━━━━━━━", value="", inline=False)
-    embed.add_field(name="🔓 Roles allowed to give strikes", value=allowed_str, inline=False)
+    embed.add_field(name="🚨 Give Strikes", value="Anyone with **Manage Messages** permission can use `/warn @user`", inline=False)
     embed.add_field(name="⚖️ Strike 3 Punishment", value=punishment_str, inline=False)
     embed.set_footer(text="Use the buttons below to configure settings.")
     return embed
-
-
-class AddAdminRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(placeholder="Select a role that can give strikes...", min_values=1, max_values=1)
-
-    async def callback(self, interaction: discord.Interaction):
-        data = load_data()
-        cfg = get_guild_config(data, interaction.guild.id)
-        rid = self.values[0].id
-        if rid not in cfg["allowed_admin_roles"]:
-            cfg["allowed_admin_roles"].append(rid)
-            save_data(data)
-        await interaction.response.edit_message(
-            embed=build_dashboard_embed(cfg, interaction.guild),
-            view=DashboardView()
-        )
-
-
-class RemoveAdminRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(placeholder="Select a role to remove...", min_values=1, max_values=1)
-
-    async def callback(self, interaction: discord.Interaction):
-        data = load_data()
-        cfg = get_guild_config(data, interaction.guild.id)
-        rid = self.values[0].id
-        if rid in cfg["allowed_admin_roles"]:
-            cfg["allowed_admin_roles"].remove(rid)
-            save_data(data)
-        await interaction.response.edit_message(
-            embed=build_dashboard_embed(cfg, interaction.guild),
-            view=DashboardView()
-        )
-
-
-class AdminRoleSelectView(discord.ui.View):
-    def __init__(self, mode: str):
-        super().__init__(timeout=60)
-        if mode == "add":
-            self.add_item(AddAdminRoleSelect())
-        else:
-            self.add_item(RemoveAdminRoleSelect())
 
 
 class SetPunishmentView(discord.ui.View):
@@ -148,15 +102,7 @@ class DashboardView(discord.ui.View):
         except discord.Forbidden:
             await interaction.response.send_message("❌ I don't have permission to edit the AntiPing role.", ephemeral=True)
 
-    @discord.ui.button(label="➕ Add Admin Role", style=discord.ButtonStyle.primary, row=1)
-    async def add_admin_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(view=AdminRoleSelectView("add"))
-
-    @discord.ui.button(label="➖ Remove Admin Role", style=discord.ButtonStyle.secondary, row=1)
-    async def remove_admin_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(view=AdminRoleSelectView("remove"))
-
-    @discord.ui.button(label="⚖️ Set Punishment", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="⚖️ Set Punishment", style=discord.ButtonStyle.primary, row=1)
     async def set_punishment(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(view=SetPunishmentView())
 

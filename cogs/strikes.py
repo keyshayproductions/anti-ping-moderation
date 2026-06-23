@@ -28,8 +28,7 @@ def get_guild_config(data, guild_id: int) -> dict:
             "punishment": "timeout",
             "timeout_minutes": 60,
             "strike_roles": {},
-            "antiping_role_id": None,
-            "allowed_admin_roles": []
+            "antiping_role_id": None
         }
     return data[gid]
 
@@ -202,18 +201,8 @@ class StrikesCog(commands.Cog):
                 return
 
     @discord.app_commands.command(name="warn", description="Give a member a strike.")
+    @discord.app_commands.default_permissions(manage_messages=True)
     async def warn(self, interaction: discord.Interaction, member: discord.Member):
-        data = load_data()
-        cfg = get_guild_config(data, interaction.guild.id)
-        allowed_roles = cfg.get("allowed_admin_roles", [])
-
-        user_role_ids = [r.id for r in interaction.user.roles]
-        has_permission = any(rid in user_role_ids for rid in allowed_roles) or interaction.user.guild_permissions.administrator
-
-        if not has_permission and allowed_roles:
-            await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
-            return
-
         strike = await apply_strike(member, interaction.guild, moderator=interaction.user)
         await interaction.response.send_message(f"{member.mention} has been warned. They are now on **Strike {strike}**.")
 
