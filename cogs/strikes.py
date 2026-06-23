@@ -38,7 +38,7 @@ async def ensure_bot_role(guild: discord.Guild, bot):
     if not role:
         role = await guild.create_role(
             name="Anti-Ping & Moderation",
-            color=discord.Color(0x3498db),
+            color=discord.Color(0x0a3050),
             reason="Anti Ping bot setup"
         )
     me = guild.get_member(bot.user.id)

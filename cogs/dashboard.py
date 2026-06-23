@@ -17,12 +17,13 @@ def build_dashboard_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
 
     embed = discord.Embed(title="🛡️ Anti Ping Dashboard", color=discord.Color.blurple())
     embed.add_field(
-        name="📋 How it works",
-        value="Give members the **AntiPing** role to protect them from being pinged.\n\n"
-              "⚠️ **Important**: Go to Server Settings → Roles → AntiPing → Turn OFF \"Allow anyone to mention this role\"\n\n"
-              "**OR** click the button below to auto-disable it.",
+        name="📋 SETUP: Protect Members from Pings",
+        value="1. Give members the **AntiPing** role\n"
+              "2. Click button below to auto-disable mentions on AntiPing role\n\n"
+              "**Manual method**: Server Settings → Roles → AntiPing → Uncheck \"Allow anyone to mention this role\"",
         inline=False
     )
+    embed.add_field(name="━━━━━━━━━━━━━━━━━━", value="", inline=False)
     embed.add_field(name="🔓 Roles allowed to give strikes", value=allowed_str, inline=False)
     embed.add_field(name="⚖️ Strike 3 Punishment", value=punishment_str, inline=False)
     embed.set_footer(text="Use the buttons below to configure settings.")
@@ -30,9 +31,6 @@ def build_dashboard_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
 
 
 class AddAdminRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(placeholder="Select a role that can give strikes...", min_values=1, max_values=1)
-
     async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
@@ -47,9 +45,6 @@ class AddAdminRoleSelect(discord.ui.RoleSelect):
 
 
 class RemoveAdminRoleSelect(discord.ui.RoleSelect):
-    def __init__(self):
-        super().__init__(placeholder="Select a role to remove...", min_values=1, max_values=1)
-
     async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
@@ -63,13 +58,24 @@ class RemoveAdminRoleSelect(discord.ui.RoleSelect):
         )
 
 
-class SelectAdminRoleView(discord.ui.View):
+class AdminRoleSelectView(discord.ui.View):
     def __init__(self, mode: str):
         super().__init__(timeout=60)
         if mode == "add":
-            self.add_item(AddAdminRoleSelect())
+            self.add_item(AddAdminRoleSelect(
+                placeholder="Select a role that can give strikes...",
+                min_values=1,
+                max_values=1
+            ))
         else:
-            self.add_item(RemoveAdminRoleSelect())
+            self.add_item(RemoveAdminRoleSelect(
+                placeholder="Select a role to remove...",
+                min_values=1,
+                max_values=1
+            ))
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
 
 
 class SetPunishmentView(discord.ui.View):
@@ -149,11 +155,11 @@ class DashboardView(discord.ui.View):
 
     @discord.ui.button(label="➕ Add Admin Role", style=discord.ButtonStyle.primary, row=1)
     async def add_admin_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(view=SelectAdminRoleView("add"))
+        await interaction.response.edit_message(view=AdminRoleSelectView("add"))
 
     @discord.ui.button(label="➖ Remove Admin Role", style=discord.ButtonStyle.secondary, row=1)
     async def remove_admin_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(view=SelectAdminRoleView("remove"))
+        await interaction.response.edit_message(view=AdminRoleSelectView("remove"))
 
     @discord.ui.button(label="⚖️ Set Punishment", style=discord.ButtonStyle.primary, row=2)
     async def set_punishment(self, interaction: discord.Interaction, button: discord.ui.Button):
