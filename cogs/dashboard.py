@@ -31,6 +31,9 @@ def build_dashboard_embed(cfg: dict, guild: discord.Guild) -> discord.Embed:
 
 
 class AddAdminRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(placeholder="Select a role that can give strikes...", min_values=1, max_values=1)
+
     async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
@@ -45,6 +48,9 @@ class AddAdminRoleSelect(discord.ui.RoleSelect):
 
 
 class RemoveAdminRoleSelect(discord.ui.RoleSelect):
+    def __init__(self):
+        super().__init__(placeholder="Select a role to remove...", min_values=1, max_values=1)
+
     async def callback(self, interaction: discord.Interaction):
         data = load_data()
         cfg = get_guild_config(data, interaction.guild.id)
@@ -62,20 +68,9 @@ class AdminRoleSelectView(discord.ui.View):
     def __init__(self, mode: str):
         super().__init__(timeout=60)
         if mode == "add":
-            self.add_item(AddAdminRoleSelect(
-                placeholder="Select a role that can give strikes...",
-                min_values=1,
-                max_values=1
-            ))
+            self.add_item(AddAdminRoleSelect())
         else:
-            self.add_item(RemoveAdminRoleSelect(
-                placeholder="Select a role to remove...",
-                min_values=1,
-                max_values=1
-            ))
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+            self.add_item(RemoveAdminRoleSelect())
 
 
 class SetPunishmentView(discord.ui.View):

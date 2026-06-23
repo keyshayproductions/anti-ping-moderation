@@ -8,6 +8,7 @@ DATA_PATH = "data/guilds.json"
 STRIKE_ROLE_NAMES = ["Strike 1", "Strike 2", "Strike 3"]
 STRIKE_COLORS = [discord.Color.yellow(), discord.Color.orange(), discord.Color.red()]
 ANTIPING_ROLE_NAME = "AntiPing"
+DIVIDER_ROLE_NAME = "─────────────────"
 
 
 def load_data():
@@ -33,6 +34,16 @@ def get_guild_config(data, guild_id: int) -> dict:
     return data[gid]
 
 
+async def ensure_divider_role(guild: discord.Guild):
+    role = discord.utils.get(guild.roles, name=DIVIDER_ROLE_NAME)
+    if not role:
+        await guild.create_role(
+            name=DIVIDER_ROLE_NAME,
+            color=discord.Color.darker_gray(),
+            reason="Anti Ping divider"
+        )
+
+
 async def ensure_bot_role(guild: discord.Guild, bot):
     role = discord.utils.get(guild.roles, name="Anti-Ping & Moderation")
     if not role:
@@ -41,6 +52,10 @@ async def ensure_bot_role(guild: discord.Guild, bot):
             color=discord.Color(0x0a3050),
             reason="Anti Ping bot setup"
         )
+    else:
+        # Update color if it exists
+        if role.color != discord.Color(0x0a3050):
+            await role.edit(color=discord.Color(0x0a3050))
     me = guild.get_member(bot.user.id)
     if me and role not in me.roles:
         await me.add_roles(role)
@@ -82,6 +97,10 @@ async def ensure_strike_roles(guild: discord.Guild):
         if not role:
             role = await guild.create_role(name=name, color=STRIKE_COLORS[i-1], reason="Anti Ping setup")
             changed = True
+        else:
+            # Update name and color if changed
+            if role.name != name or role.color != STRIKE_COLORS[i-1]:
+                await role.edit(name=name, color=STRIKE_COLORS[i-1])
 
         cfg["strike_roles"][key] = role.id
 
@@ -111,13 +130,19 @@ async def apply_strike(member: discord.Member, guild: discord.Guild, moderator: 
         if role_id:
             role = guild.get_role(role_id)
             if role and role in member.roles:
-                await member.remove_roles(role)
+                try:
+                    await member.remove_roles(role)
+                except discord.Forbidden:
+                    pass
 
     new_role_id = strike_roles.get(str(new_strike))
     if new_role_id:
         new_role = guild.get_role(new_role_id)
         if new_role:
-            await member.add_roles(new_role)
+            try:
+                await member.add_roles(new_role)
+            except discord.Forbidden:
+                pass
 
     save_data(data)
 
@@ -146,12 +171,14 @@ class StrikesCog(commands.Cog):
         for guild in self.bot.guilds:
             await ensure_strike_roles(guild)
             await ensure_antiping_role(guild)
+            await ensure_divider_role(guild)
             await ensure_bot_role(guild, self.bot)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
         await ensure_strike_roles(guild)
         await ensure_antiping_role(guild)
+        await ensure_divider_role(guild)
         await ensure_bot_role(guild, self.bot)
 
     @commands.Cog.listener()
@@ -226,14 +253,20 @@ class StrikesCog(commands.Cog):
         cfg = get_guild_config(data, interaction.guild.id)
         strike_roles = cfg["strike_roles"]
 
+        removed = 0
         for i in range(1, 4):
             role_id = strike_roles.get(str(i))
             if role_id:
                 role = interaction.guild.get_role(role_id)
                 if role and role in member.roles:
-                    await member.remove_roles(role)
+                    try:
+                        await member.remove_roles(role)
+                        removed += 1
+                    except discord.Forbidden:
+                        await interaction.response.send_message(f"❌ I don't have permission to remove roles.", ephemeral=True)
+                        return
 
-        await interaction.response.send_message(f"Cleared all strikes for {member.mention}.")
+        await interaction.response.send_message(f"✅ Removed {removed} strike(s) from {member.mention}.")
 
 
 async def setup(bot):
