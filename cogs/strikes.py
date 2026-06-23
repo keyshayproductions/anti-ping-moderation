@@ -49,13 +49,9 @@ async def ensure_bot_role(guild: discord.Guild, bot):
     if not role:
         role = await guild.create_role(
             name="Anti-Ping & Moderation",
-            color=discord.Color(0x0a3050),
+            color=discord.Color(0x555EEA),
             reason="Anti Ping bot setup"
         )
-    else:
-        # Update color if it exists
-        if role.color != discord.Color(0x0a3050):
-            await role.edit(color=discord.Color(0x0a3050))
     me = guild.get_member(bot.user.id)
     if me and role not in me.roles:
         await me.add_roles(role)
@@ -85,7 +81,6 @@ async def ensure_antiping_role(guild: discord.Guild):
 async def ensure_strike_roles(guild: discord.Guild):
     data = load_data()
     cfg = get_guild_config(data, guild.id)
-    changed = False
 
     for i, name in enumerate(STRIKE_ROLE_NAMES, start=1):
         key = str(i)
@@ -96,18 +91,11 @@ async def ensure_strike_roles(guild: discord.Guild):
             role = discord.utils.get(guild.roles, name=name)
         if not role:
             role = await guild.create_role(name=name, color=STRIKE_COLORS[i-1], reason="Anti Ping setup")
-            changed = True
-        else:
-            # Update name and color if changed
-            if role.name != name or role.color != STRIKE_COLORS[i-1]:
-                await role.edit(name=name, color=STRIKE_COLORS[i-1])
 
         cfg["strike_roles"][key] = role.id
 
-    if changed or str(guild.id) not in load_data():
-        data[str(guild.id)] = cfg
-        save_data(data)
-
+    data[str(guild.id)] = cfg
+    save_data(data)
     return cfg["strike_roles"]
 
 
@@ -169,17 +157,17 @@ class StrikesCog(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         for guild in self.bot.guilds:
-            await ensure_strike_roles(guild)
-            await ensure_antiping_role(guild)
             await ensure_divider_role(guild)
             await ensure_bot_role(guild, self.bot)
+            await ensure_antiping_role(guild)
+            await ensure_strike_roles(guild)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
-        await ensure_strike_roles(guild)
-        await ensure_antiping_role(guild)
         await ensure_divider_role(guild)
         await ensure_bot_role(guild, self.bot)
+        await ensure_antiping_role(guild)
+        await ensure_strike_roles(guild)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
