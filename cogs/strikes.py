@@ -6,6 +6,8 @@ from datetime import timedelta
 DATA_PATH = "data/guilds.json"
 
 STRIKE_ROLE_NAMES = ["Strike 1", "Strike 2", "Strike 3"]
+STRIKE_COLORS = [discord.Color.yellow(), discord.Color.orange(), discord.Color.red()]
+ANTIPING_ROLE_NAME = "AntiPing"
 
 
 def load_data():
@@ -22,11 +24,11 @@ def get_guild_config(data, guild_id: int) -> dict:
     gid = str(guild_id)
     if gid not in data:
         data[gid] = {
-            "protected_roles": [],
-            "allowed_roles": [],
             "punishment": "timeout",
             "timeout_minutes": 60,
-            "strike_roles": {}
+            "strike_roles": {},
+            "antiping_role_id": None,
+            "allowed_admin_roles": []
         }
     return data[gid]
 
@@ -44,6 +46,27 @@ async def ensure_bot_role(guild: discord.Guild, bot):
         await me.add_roles(role)
 
 
+async def ensure_antiping_role(guild: discord.Guild):
+    data = load_data()
+    cfg = get_guild_config(data, guild.id)
+
+    role_id = cfg.get("antiping_role_id")
+    role = guild.get_role(role_id) if role_id else None
+
+    if not role:
+        role = discord.utils.get(guild.roles, name=ANTIPING_ROLE_NAME)
+    if not role:
+        role = await guild.create_role(
+            name=ANTIPING_ROLE_NAME,
+            color=discord.Color(0x3498db),
+            reason="Anti Ping bot setup"
+        )
+
+    cfg["antiping_role_id"] = role.id
+    data[str(guild.id)] = cfg
+    save_data(data)
+
+
 async def ensure_strike_roles(guild: discord.Guild):
     data = load_data()
     cfg = get_guild_config(data, guild.id)
@@ -57,7 +80,7 @@ async def ensure_strike_roles(guild: discord.Guild):
         if not role:
             role = discord.utils.get(guild.roles, name=name)
         if not role:
-            role = await guild.create_role(name=name, reason="Anti Ping setup")
+            role = await guild.create_role(name=name, color=STRIKE_COLORS[i-1], reason="Anti Ping setup")
             changed = True
 
         cfg["strike_roles"][key] = role.id
@@ -74,7 +97,6 @@ async def apply_strike(member: discord.Member, guild: discord.Guild, moderator: 
     cfg = get_guild_config(data, guild.id)
     strike_roles = cfg["strike_roles"]
 
-    # Determine current strike count
     current = 0
     for i in range(3, 0, -1):
         role_id = strike_roles.get(str(i))
@@ -84,7 +106,6 @@ async def apply_strike(member: discord.Member, guild: discord.Guild, moderator: 
 
     new_strike = min(current + 1, 3)
 
-    # Remove old strike roles, add new one
     for i in range(1, 4):
         role_id = strike_roles.get(str(i))
         if role_id:
@@ -100,7 +121,6 @@ async def apply_strike(member: discord.Member, guild: discord.Guild, moderator: 
 
     save_data(data)
 
-    # Apply punishment on strike 3
     if new_strike == 3:
         punishment = cfg.get("punishment", "timeout")
         try:
@@ -125,10 +145,13 @@ class StrikesCog(commands.Cog):
     async def on_ready(self):
         for guild in self.bot.guilds:
             await ensure_strike_roles(guild)
+            await ensure_antiping_role(guild)
             await ensure_bot_role(guild, self.bot)
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):
+        await ensure_strike_roles(guild)
+        await ensure_antiping_role(guild)
         await ensure_bot_role(guild, self.bot)
 
     @commands.Cog.listener()
@@ -138,44 +161,44 @@ class StrikesCog(commands.Cog):
 
         data = load_data()
         cfg = get_guild_config(data, message.guild.id)
+        antiping_role_id = cfg.get("antiping_role_id")
 
-        protected = cfg.get("protected_roles", [])
-        allowed = cfg.get("allowed_roles", [])
-
-        if not protected:
+        if not antiping_role_id:
             return
 
-        # Check if author has an allowed role
-        author_role_ids = [r.id for r in message.author.roles]
-        if any(rid in author_role_ids for rid in allowed):
+        antiping_role = message.guild.get_role(antiping_role_id)
+        if not antiping_role:
             return
 
-        # Check if any mentioned role is protected
-        mentioned_role_ids = [r.id for r in message.role_mentions]
-        # Also check user pings — if the user has a protected role
-        mentioned_user_role_ids = []
+        # Check if anyone mentioned has AntiPing role
         for user in message.mentions:
             member = message.guild.get_member(user.id)
-            if member:
-                mentioned_user_role_ids.extend(r.id for r in member.roles)
-
-        pinged_protected = any(rid in protected for rid in mentioned_role_ids + mentioned_user_role_ids)
-
-        if pinged_protected:
-            strike = await apply_strike(message.author, message.guild)
-            try:
-                await message.delete()
-            except:
-                pass
-            await message.channel.send(
-                f"{message.author.mention} You are not allowed to ping that role. "
-                f"You have received **Strike {strike}**.",
-                delete_after=8
-            )
+            if member and antiping_role in member.roles:
+                strike = await apply_strike(message.author, message.guild)
+                try:
+                    await message.delete()
+                except:
+                    pass
+                await message.channel.send(
+                    f"{message.author.mention} You are not allowed to ping that member. "
+                    f"You have received **Strike {strike}**.",
+                    delete_after=8
+                )
+                return
 
     @discord.app_commands.command(name="warn", description="Give a member a strike.")
-    @discord.app_commands.default_permissions(manage_messages=True)
     async def warn(self, interaction: discord.Interaction, member: discord.Member):
+        data = load_data()
+        cfg = get_guild_config(data, interaction.guild.id)
+        allowed_roles = cfg.get("allowed_admin_roles", [])
+
+        user_role_ids = [r.id for r in interaction.user.roles]
+        has_permission = any(rid in user_role_ids for rid in allowed_roles) or interaction.user.guild_permissions.administrator
+
+        if not has_permission and allowed_roles:
+            await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
+            return
+
         strike = await apply_strike(member, interaction.guild, moderator=interaction.user)
         await interaction.response.send_message(f"{member.mention} has been warned. They are now on **Strike {strike}**.")
 
